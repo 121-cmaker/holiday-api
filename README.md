@@ -1,6 +1,6 @@
 # 유학생을 위한 날씨와 공휴일 조회 · Vercel Serverless 프로젝트
 
-**유학생이 도시의 현재 날씨와 한국 공휴일을 함께 확인하는 Vercel Serverless 프로젝트**입니다. `/api/weather`는 Open-Meteo 응답을 필요한 필드만 정리해 10분 CDN 캐시하고, `/api/holidays`는 공공데이터(한국천문연구원 특일 정보)를 1시간 캐시합니다. 공공데이터 인증키는 Vercel 환경 변수에만 두며, 함수는 서울 리전(`icn1`)에서 실행합니다. 외부 패키지 없이 HTML과 JavaScript만 씁니다.
+**유학생이 도시의 현재 날씨와 한국 공휴일을 함께 확인하는 Vercel Serverless 프로젝트**입니다. `/api/weather`는 Open-Meteo 응답을 필요한 필드만 정리해 10분 CDN 캐시하고, `/api/holidays`는 공공데이터(한국천문연구원 특일 정보)를 1시간 캐시합니다. 공공데이터 인증키는 Vercel 환경 변수에만 두며, 함수는 서울 리전(`icn1`)에서 실행합니다. 날씨·공휴일은 외부 패키지 없이 구현하며, 방명록은 Supabase SDK를 사용합니다.
 
 ```text
 사용자가 연·월 선택 → 브라우저가 fetch('/api/holidays?year=2026&month=10')
@@ -131,28 +131,33 @@ node scripts/dev.mjs --mock  # 연습 모드 → 브라우저에서 http://local
 
 **비밀키와 DB 비밀번호는 GitHub, README, 채팅에 절대 입력하지 않습니다.**
 
-## 운영 검증 기록
-| 항목 | 상태 |
+## 운영 검증 기록 (2026-11-04 KST)
+운영 주소: https://holiday-api-ywgd.vercel.app/guestbook.html
+배포 소스: PR #1 병합 커밋 `5aad3335726cf5242605eca85951832bdda56bf4`.
+
+| 항목 | 실제 결과 |
 |---|---|
-| GitHub 원본 저장소 | 존재 확인 (121-cmaker/holiday-api) |
-| Vercel 실제 URL | 아직 확인 못함 |
-| GET 정상 200, 최신 20개 | 미검증 |
-| 빈 이름 POST → 400 | 미검증 |
-| 201자 POST → 400 | 미검증 |
-| JSON 아닌 POST → 400 | 미검증 |
-| 정상 POST → 201 | 미검증 |
-| anon 직접 INSERT 차단 | 미검증 (SQL 실행 필요) |
-| 화면 및 응답 내 비밀키 노출 | 운영 환경 미검증 |
+| GET /api/guestbook | 200, 처음에는 빈 목록 |
+| 빈 이름 POST | 400 |
+| 201자 내용 POST | 400 |
+| text/plain POST | 400 |
+| 정상 POST | 201, 수업 테스트용 글 1개 저장 |
+| 저장 후 GET | 200, 반환된 id가 목록에 존재 |
+| guestbook.html | 200 |
+| 화면 HTML 및 위 API 응답의 키 접두사 | sb_secret_, sb_publishable_ 없음 |
+| RLS | true, 정책 1개, SELECT만 |
+| anon 및 authenticated 권한 조회 | SELECT만, INSERT false |
+| anon 직접 INSERT | begin; set local role anon; insert …; rollback; 실행 시 SQLSTATE 42501 permission denied |
+| 기존 날씨 /api/weather?city=Seoul | 200 |
+| 기존 공휴일 /api/holidays?year=2026&month=10 | 500 NO_KEY: DATA_GO_KR_KEY 미설정, 후속 설정 필요 |
+
+HTTP 검증은 Python urllib.request로 운영 주소에 실제 GET/POST 요청을 보내 상태와 JSON을 확인했습니다. 정상 POST는 별명 `수업 테스트`, 내용 `11월 4일 배포 확인용 테스트입니다.`로 수행했습니다. 공개 테스트 글은 목록에 남습니다. RLS는 Supabase SQL Editor에서 실제 조회 및 anon 역할 INSERT 시도로 확인했습니다. 모바일 화면과 20개 초과 데이터 정렬은 별도 실측하지 않았습니다.
 
 ## 개인 프로젝트 설계
 유학생 날씨·공휴일 조회 웹사이트에 방문자의 **도시별 날씨 정보 후기**를 저장하는 기능을 기획했습니다. 테이블 `weather_reviews` 컬럼은 `id`, `created_at`, `nickname`, `city`, `review`이며, 별명만 받고 전화번호·학번·실명은 저장하지 않습니다. SELECT는 공개하고 INSERT는 서버 검증을 통과한 요청만 처리합니다. SQL 설계 파일은 `supabase/weather_reviews.sql`입니다.
 
 
-## 2026-11-04 실제 검증 기록
+## 로컬 테스트
+Node.js 24에서 `node --test`: 27/27 통과 (기존 공휴일·날씨 20개 + 입력 검증 6개 + API 오류 처리 1개). Supabase 의존성을 설치한 뒤 실행했으며 키 없음 500, DB 오류 502도 모의 응답으로 검증했습니다.
 
-- 통합 로컬 테스트: 27/27 통과 (기존 공휴일·날씨 20개 + 방명록 입력 검증 6개 + API 오류 처리 1개).
-- 이 테스트는 Supabase 연결이나 실제 저장 성공을 증명하지 않습니다.
-- GitHub 권한 수정 후 week10-guestbook 개발 브랜치 생성 성공.
-- Supabase SQL 실행 및 RLS 실측: 미실행.
-- Vercel 신규 배포 및 운영 방명록 조회·작성: 미검증.
-- 운영 사이트 주소 및 실제 저장 테스트 결과는 배포 후 기록해야 합니다.
+GitHub 연결의 저장소 선택에 holiday-api를 추가하여 403을 해결했고, PR #1을 승인 후 main에 병합했습니다. 비밀키는 Vercel Production의 Secret 유형으로 저장했습니다.
