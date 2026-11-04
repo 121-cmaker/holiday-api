@@ -149,7 +149,7 @@ node scripts/dev.mjs --mock  # 연습 모드 → 브라우저에서 http://local
 | anon 및 authenticated 권한 조회 | SELECT만, INSERT false |
 | anon 직접 INSERT | begin; set local role anon; insert …; rollback; 실행 시 SQLSTATE 42501 permission denied |
 | 기존 날씨 /api/weather?city=Seoul | 200 |
-| 기존 공휴일 /api/holidays?year=2026&month=10 | 500 NO_KEY: DATA_GO_KR_KEY 미설정, 후속 설정 필요 |
+| 기존 공휴일 /api/holidays?year=2026&month=10 | 200, 개천절·대체공휴일·한글날 3개 (인증키 설정 후 재검증) |
 
 HTTP 검증은 Python urllib.request로 운영 주소에 실제 GET/POST 요청을 보내 상태와 JSON을 확인했습니다. 정상 POST는 별명 `수업 테스트`, 내용 `11월 4일 배포 확인용 테스트입니다.`로 수행했습니다. 공개 테스트 글은 목록에 남습니다. RLS는 Supabase SQL Editor에서 실제 조회 및 anon 역할 INSERT 시도로 확인했습니다. 모바일 화면과 20개 초과 데이터 정렬은 별도 실측하지 않았습니다.
 
@@ -161,3 +161,19 @@ HTTP 검증은 Python urllib.request로 운영 주소에 실제 GET/POST 요청�
 Node.js 24에서 `node --test`: 27/27 통과 (기존 공휴일·날씨 20개 + 입력 검증 6개 + API 오류 처리 1개). Supabase 의존성을 설치한 뒤 실행했으며 키 없음 500, DB 오류 502도 모의 응답으로 검증했습니다.
 
 GitHub 연결의 저장소 선택에 holiday-api를 추가하여 403을 해결했고, PR #1을 승인 후 main에 병합했습니다. 비밀키는 Vercel Production의 Secret 유형으로 저장했습니다.
+
+
+## 공휴일 API 최종 재검증 (2026-11-04 16:25 KST)
+공공데이터포털에서 한국천문연구원 특일 정보의 공휴일 조회 개발계정을 신청하여 자동승인 받았습니다. 인증키는 Vercel Production의 DATA_GO_KR_KEY (Secret)에만 저장하고 재배포했습니다. 이전 500 NO_KEY 문제는 해결되었습니다.
+
+| 실제 운영 요청 | 결과 |
+|---|---|
+| /api/holidays?year=2026&month=10 | 200, 10/3 개천절·10/5 대체공휴일·10/9 한글날 |
+| /api/holidays?year=2026&month=11 | 200, count 0, items [] |
+| /api/holidays?year=2026&month=12 | 200, 12/25 기독탄신일 1개 |
+| /api/holidays?year=2026&month=13 | 400 BAD_MONTH |
+| 10월 요청 2회 반복 | x-vercel-cache HIT / HIT |
+| /api/weather?city=Seoul | 200 |
+| /api/guestbook | 200 |
+
+Python urllib.request로 실제 운영 주소에 요청하여 상태 코드, JSON 본문, 캐시 응답 헤더를 확인했습니다. 키나 비밀번호는 이 기록에 포함하지 않았습니다.
