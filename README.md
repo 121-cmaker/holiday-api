@@ -211,7 +211,7 @@ AI 함수: https://holiday-api-ywgd.vercel.app/api/suggest?year=2026&month=10
 | AI 정상·400·키 없음·429·시간 초과 | `node --test tests/suggest.test.mjs` | 11개 테스트 통과(형식·캐시·중복·무공휴일·상위 오류 포함) |
 | 기존 공휴일·날씨·입력 검증 | `node --test tests/*.test.mjs test/guestbook.test.js` | 37개 통과 |
 | Supabase API 포함 전체 테스트 | GitHub Actions `npm test` | 38/38 통과 — [실행 기록](https://github.com/121-cmaker/holiday-api/actions/runs/44253302891) |
-| 운영 정상 200·추천 세 줄 | `/api/suggest?year=2026&month=10` | HASA_API_KEY 미설정, 본인 입력 후 재배포·검증 필요 |
+| 운영 정상 200·추천 세 줄 | `/api/suggest?year=2026&month=10` | Production Secret 설정·재배포 완료. 실제 200, 추천 세 줄 확인 (아래 최종 기록 참고) |
 | 운영 13월·문자 입력 400 | `/api/suggest?year=2026&month=13`, `?year=abc&month=10` | 실제 운영 요청으로 확인: 400 BAD_MONTH / BAD_YEAR |
 | 응답·화면의 비밀키 노출 없음 | HTML·응답 검사 | HTML·점검 API 응답에서 비밀키 접두사 패턴 없음 |
 | 화면 로딩·오류·재시도 | 추천 버튼과 오류 안내 | 모의 브라우저에서 로딩·3개 결과·월 변경 초기화 확인. 운영 390px에서 키 없음 오류·재시도 활성화 확인, 가로 넘침 없음 |
@@ -249,4 +249,27 @@ AI 함수: https://holiday-api-ywgd.vercel.app/api/suggest?year=2026&month=10
 
 Playwright 모의 응답 화면 점검에서는 요청 중 버튼 잠금·로딩 글, 세 줄 결과, 오류 후 재시도, 월 변경 시 결과 초기화를 확인했습니다. 모의 세 줄을 실제 AI 답변으로 기록하지 않았습니다.
 
-남은 본인 수행 항목: HASA_API_KEY를 Sensitive·Production으로 입력 → 재배포 후 실제 200/추천 세 줄 확인; 사용자 3명 피드백 수집 및 반영 근거 작성.
+남은 본인 수행 항목: 사용자 3명 피드백 수집 및 반영 근거 작성. AI 키 설정·재배포·실제 추천 검증은 아래 최종 기록에서 완료했습니다.
+
+
+### AI 실호출 최종 검증 (2026-11-18 16:20 KST)
+
+HASA_API_KEY를 Vercel Production의 Secret(sensitive) 환경 변수로 설정하고 재배포했습니다. 키 값은 코드·GitHub·README·검증 출력에 기록하지 않았습니다. 배포 ID: `dpl_3BdfkxNoSeX12oMipsKJwDAxqQG5`, 상태 READY, 리전 icn1. 아래 결과는 모의 응답이 아니라 운영 주소에서 Open HASA 모델을 호출한 결과입니다. 앞선 15:45의 NO_KEY 문제는 해결되었습니다.
+
+| 실제 요청/화면 | 최종 결과 |
+|---|---|
+| `GET /api/suggest?year=2026&month=10` | 200, gemma-4-31b, 공휴일 3건, 추천 3줄, totalTokens 280 |
+| 10월 같은 요청 반복 | 200, cached:true, generatedAt 동일 — 서버 5분 캐시 확인 |
+| `GET /api/suggest?year=2026&month=11` | 200, 공휴일 0건, “이번 달은 공휴일이 없습니다.”와 일반 활동 두 줄, totalTokens 208 |
+| `GET /api/suggest?year=2026&month=13` | 400 |
+| `GET /api/suggest?year=abc&month=10` | 400 |
+| HTML·실제 추천·오류 응답 검사 | 개발키 접두사 패턴 노출 없음 |
+| 실제 화면의 AI 추천 받기 클릭 | 요청 중 버튼 잠금과 로딩 안내 → 세 줄 결과 표시 → 버튼 활성화 |
+| 전체 자동 시험 | 기존 GitHub Actions 38/38 통과. 이번 변경은 키 설정과 검증 기록이며 코드 변경 없음 |
+
+실제 10월 추천:
+1. 10월 3일 개천절에 휴식하세요.
+2. 10월 5일 대체공휴일을 즐기세요.
+3. 10월 9일 한글날에 한국어를 배우세요.
+
+검증 방법은 운영 HTTP GET과 브라우저의 실제 추천 버튼 클릭입니다. AI 기능 구현·배포·정상 및 오류 검증은 완료했습니다. 사용자 3명 피드백은 아직 미수집이며 실제 의견을 받은 뒤 반영 근거를 작성합니다.
