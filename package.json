@@ -4,7 +4,7 @@
   "description": "연·월을 고르면 Vercel 함수가 공공데이터를 조회하는 수업 예제 + Supabase guestbook",
   "type": "module",
   "scripts": {
-    "test": "node --test",
+    "test": "node --test tests/*.test.mjs test/*.test.js",
     "dev": "node scripts/dev.mjs",
     "dev:mock": "node scripts/dev.mjs --mock"
   },

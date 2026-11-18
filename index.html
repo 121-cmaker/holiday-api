@@ -99,6 +99,13 @@
       <button id="submit" type="submit">조회</button>
     </form>
     <section id="result" aria-live="polite" aria-busy="false"></section>
+    <section class="panel" style="margin-top:18px" aria-labelledby="ai-title">
+      <h2 id="ai-title">이번 달 AI 추천</h2>
+      <p class="meta">선택한 연·월과 공휴일 목록만 AI에 전송합니다. 이름·학번·도시 검색어·방명록은 보내지 않습니다. AI 답변은 틀릴 수 있으니 일정을 확인하세요.</p>
+      <p class="meta">수업 시연용 · 개발키 한도: 분당 10회, 동시 1건, 하루 성공 500건</p>
+      <button id="suggest-button" type="button" disabled>AI 추천 받기</button>
+      <section id="suggest-result" aria-live="polite" aria-busy="false"></section>
+    </section>
     </section>
   </main>
   <footer class="wrap">날씨: Open-Meteo · 공휴일: 한국천문연구원 특일 정보(공공데이터포털)</footer>
@@ -224,8 +231,60 @@
       result.replaceChildren(panel);
     }
 
+    const suggestButton = document.getElementById('suggest-button');
+    const suggestResult = document.getElementById('suggest-result');
+    let suggestionController = null;
+    let loadedMonth = null;
+    let suggestBusy = false;
+    function resetSuggestion() {
+      suggestionController?.abort();
+      suggestionController = null;
+      suggestButton.textContent = 'AI 추천 받기';
+      loadedMonth = null;
+      suggestBusy = false;
+      suggestButton.disabled = true;
+      suggestResult.setAttribute('aria-busy', 'false');
+      suggestResult.replaceChildren();
+    }
+    async function suggest() {
+      if (suggestBusy || !loadedMonth) return;
+      suggestBusy = true;
+      suggestButton.disabled = true;
+      const current = new AbortController();
+      suggestionController = current;
+      const timeout = setTimeout(() => current.abort(), 30000);
+      suggestResult.setAttribute('aria-busy', 'true');
+      suggestResult.replaceChildren(el('p', '', 'AI 추천을 불러오는 중입니다…'));
+      try {
+        const response = await fetch(`/api/suggest?year=${loadedMonth.year}&month=${loadedMonth.month}`, { signal: current.signal });
+        const data = await response.json();
+        if (suggestionController !== current) return;
+        if (!response.ok || data.needsRetry) throw new Error([data.error || data.message, data.hint].filter(Boolean).join(' '));
+        if (!Array.isArray(data.suggestions) || data.suggestions.length !== 3) throw new Error('추천을 다시 받아 주세요.');
+        const list = el('ol');
+        for (const item of data.suggestions) list.append(el('li', '', item));
+        suggestResult.replaceChildren(list, el('p', 'meta', `${data.year}년 ${data.month}월 · ${data.cached ? '5분 캐시 응답' : '새 추천'}`));
+      } catch (error) {
+        if (suggestionController !== current) return;
+        const message = el('p', 'error', current.signal.aborted ? '응답 대기시간이 지났습니다. 다시 시도하세요.' : error.message || '연결을 확인하고 다시 시도하세요.');
+        message.setAttribute('role', 'alert');
+        suggestResult.replaceChildren(message);
+        suggestButton.textContent = 'AI 추천 다시 시도';
+      } finally {
+        clearTimeout(timeout);
+        if (suggestionController === current) {
+          suggestBusy = false;
+          suggestButton.disabled = !loadedMonth;
+          suggestResult.setAttribute('aria-busy', 'false');
+        }
+      }
+    }
+    suggestButton.addEventListener('click', suggest);
+    yearSelect.addEventListener('change', resetSuggestion);
+    monthSelect.addEventListener('change', resetSuggestion);
     let controller = null;
     async function search(year, month) {
+      resetSuggestion();
       controller?.abort(); // 앞의 조회가 끝나기 전에 새로 조회하면 앞의 요청은 멈춥니다
       controller = new AbortController();
       const { signal } = controller;
@@ -240,8 +299,12 @@
         if (!response.ok || !data) {
           showError(data?.error || `서버가 ${response.status} 오류로 답했습니다.`, data?.hint, response.status, year, month);
         } else if (data.count === 0) {
+          loadedMonth = { year: data.year, month: data.month };
+          suggestButton.disabled = false;
           showEmpty(data, apiUrl);
         } else {
+          loadedMonth = { year: data.year, month: data.month };
+          suggestButton.disabled = false;
           showList(data, apiUrl);
         }
       } catch (error) {
