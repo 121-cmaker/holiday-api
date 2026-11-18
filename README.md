@@ -210,13 +210,13 @@ AI 함수: https://holiday-api-ywgd.vercel.app/api/suggest?year=2026&month=10
 |---|---|---|
 | AI 정상·400·키 없음·429·시간 초과 | `node --test tests/suggest.test.mjs` | 11개 테스트 통과(형식·캐시·중복·무공휴일·상위 오류 포함) |
 | 기존 공휴일·날씨·입력 검증 | `node --test tests/*.test.mjs test/guestbook.test.js` | 37개 통과 |
-| Supabase API 포함 전체 테스트 | GitHub Actions `npm test` | Push 후 결과 확인 예정 |
+| Supabase API 포함 전체 테스트 | GitHub Actions `npm test` | 38/38 통과 — [실행 기록](https://github.com/121-cmaker/holiday-api/actions/runs/44253302891) |
 | 운영 정상 200·추천 세 줄 | `/api/suggest?year=2026&month=10` | HASA_API_KEY 미설정, 본인 입력 후 재배포·검증 필요 |
-| 운영 13월·문자 입력 400 | `/api/suggest?year=2026&month=13`, `?year=abc&month=10` | 배포 후 확인 예정 |
-| 응답·화면의 비밀키 노출 없음 | HTML·응답 검사 | 배포 후 확인 예정 |
-| 화면 로딩·오류·재시도 | 추천 버튼과 오류 안내 | 코드 구현, 배포 후 확인 예정 |
+| 운영 13월·문자 입력 400 | `/api/suggest?year=2026&month=13`, `?year=abc&month=10` | 실제 운영 요청으로 확인: 400 BAD_MONTH / BAD_YEAR |
+| 응답·화면의 비밀키 노출 없음 | HTML·응답 검사 | HTML·점검 API 응답에서 비밀키 접두사 패턴 없음 |
+| 화면 로딩·오류·재시도 | 추천 버튼과 오류 안내 | 모의 브라우저에서 로딩·3개 결과·월 변경 초기화 확인. 운영 390px에서 키 없음 오류·재시도 활성화 확인, 가로 넘침 없음 |
 
-로컬 전체 실행은 Supabase SDK 미설치로 실패했고, 네트워크 DNS 제한으로 설치하지 못했습니다. AI 테스트와 의존성 불필요 회귀 테스트는 실제 실행했습니다. 전체 통과는 CI 결과를 확인한 뒤 기록합니다. 실제 AI 성공 응답이나 사용자 피드백을 모의 테스트 결과로 대체하지 않습니다.
+로컬 전체 실행은 Supabase SDK 미설치로 실패했고, 네트워크 DNS 제한으로 설치하지 못했습니다. AI 테스트와 의존성 불필요 회귀 테스트는 실제 실행했습니다. 이후 GitHub Actions에서 실제 의존성 설치와 전체 38개 테스트 통과를 확인했습니다. 실제 AI 성공 응답이나 사용자 피드백을 모의 테스트 결과로 대체하지 않습니다.
 
 ### 사용자 피드백과 반영
 
@@ -227,3 +227,26 @@ AI 함수: https://holiday-api-ywgd.vercel.app/api/suggest?year=2026&month=10
 | 사용자 1 | 미수집 | 미수집 | 미수집 | 미수집 | 피드백 후 작성 |
 | 사용자 2 | 미수집 | 미수집 | 미수집 | 미수집 | 피드백 후 작성 |
 | 사용자 3 | 미수집 | 미수집 | 미수집 | 미수집 | 피드백 후 작성 |
+
+
+### 운영 검증 실행 기록 (2026-11-18 15:45 KST)
+
+- 배포 소스: `6cdd737d12504f984e987b7314bd717df801f140`; Vercel `dpl_2HGENXTKXM554zXjzsphmkdYwrWh`, Production READY, `icn1`.
+- 실제 실행 명령: Node.js 24.22.1에서 `node --test tests/*.test.mjs test/guestbook.test.js` → 37/37. GitHub Actions에서 `npm install --ignore-scripts --no-audit --no-fund`, `npm test` → 38/38.
+- 운영 HTTP 요청은 인증된 배포 조회 도구로 GET을 전송해 아래 상태와 JSON을 확인했습니다. 키 값은 조회·출력하지 않았습니다.
+
+| 실제 HTTP 요청 | 결과 |
+|---|---|
+| `GET /` | 200, AI 버튼·로딩 문구·개인정보 안내 있음 |
+| `GET /api/suggest?year=2026&month=13` | 400, BAD_MONTH |
+| `GET /api/suggest?year=abc&month=10` | 400, BAD_YEAR |
+| `GET /api/suggest?year=2026&month=10` | 500, NO_KEY와 관리자 설정 안내. 실제 200 추천은 아직 검증하지 못함 |
+| `GET /api/holidays?year=2026&month=10` | 200, 공휴일 3개 |
+| `GET /api/guestbook` | 200, 기존 글 조회 성공 (추가 글 작성 없음) |
+| `GET /api/weather?city=Seoul` | 첫 요청 502 UPSTREAM_TIMEOUT, 재시도 200. 외부 날씨 서버의 일시 지연 |
+| HTML 및 위 점검 응답의 비밀키 패턴 검사 | 노출 발견 없음 |
+| 운영 화면 390×844 | 10월 조회 후 AI 버튼 클릭 → 키 없음 안내·재시도 버튼 활성화, 가로 넘침 없음 |
+
+Playwright 모의 응답 화면 점검에서는 요청 중 버튼 잠금·로딩 글, 세 줄 결과, 오류 후 재시도, 월 변경 시 결과 초기화를 확인했습니다. 모의 세 줄을 실제 AI 답변으로 기록하지 않았습니다.
+
+남은 본인 수행 항목: HASA_API_KEY를 Sensitive·Production으로 입력 → 재배포 후 실제 200/추천 세 줄 확인; 사용자 3명 피드백 수집 및 반영 근거 작성.
